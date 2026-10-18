@@ -407,6 +407,7 @@ export function App() {
           onPickOfferedCard={handlePickOfferedCard}
           onDiscardCard={handleDiscardCard}
           onResetHand={() => handleSelectGame(activeGame)}
+          onOpenFloorSelector={() => openSelector('offered')}
         />
 
         {/* Game-Specific Table Context & Rules */}
