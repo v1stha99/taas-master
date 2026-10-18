@@ -45,7 +45,8 @@ export function App() {
   const [turnNumber, setTurnNumber] = useState(1);
   const [flippedCard, setFlippedCard] = useState<Card | null>(() => parseCardString('5H'));
   const [tipluCard, setTipluCard] = useState<Card | null>(null);
-  const [offeredCard, setOfferedCard] = useState<Card | null>(() => parseCardString('JS'));
+  const [offeredCards, setOfferedCards] = useState<Card[]>(() => [parseCardString('JS')!]);
+  const offeredCard = offeredCards[0] || null;
   const [boundaryCards, setBoundaryCards] = useState<[Card | null, Card | null]>([
     parseCardString('3H'),
     parseCardString('KD'),
@@ -129,7 +130,7 @@ export function App() {
       case 'jutpatti':
         defaultCodes = ['7H', '7S', '9D', '9C', 'JH'];
         setFlippedCard(parseCardString('5H'));
-        setOfferedCard(parseCardString('JS'));
+        setOfferedCards([parseCardString('JS')!]);
         break;
       case 'kitti':
         defaultCodes = ['5H', '6H', '7H', '7S', '7D', 'KH', 'KD', '9C', '2S'];
@@ -143,11 +144,11 @@ export function App() {
           '2D', '3D', '7D', '9S', 'KS',
         ];
         setTipluCard(null);
-        setOfferedCard(parseCardString('10S'));
+        setOfferedCards([parseCardString('10S')!]);
         break;
       case 'dhumbal':
         defaultCodes = ['JH', '2S', '3D', 'KC', 'QD'];
-        setOfferedCard(parseCardString('AS'));
+        setOfferedCards([parseCardString('AS')!]);
         break;
       case 'callbreak':
         defaultCodes = [
@@ -189,6 +190,7 @@ export function App() {
             {
               hand,
               flippedCard,
+              offeredCards,
               offeredCard,
               phase: currentPhase,
               discardHistory,
@@ -373,7 +375,8 @@ export function App() {
       setTipluCard(card);
       setMarriageRules(prev => ({ ...prev, phase: 2 }));
     } else if (target === 'offered') {
-      setOfferedCard(card);
+      // Allows selecting 1 card or a pair of 2 cards
+      setOfferedCards(prev => (prev.length >= 2 ? [card] : [...prev, card]));
     } else if (target === 'boundary1') {
       setBoundaryCards(prev => [card, prev[1]]);
     } else if (target === 'boundary2') {
@@ -388,12 +391,21 @@ export function App() {
     openSelector('hand');
   };
 
-  const handlePickOfferedCard = () => {
-    if (!offeredCard) return;
-    setHand(prev => [...prev, offeredCard]);
-    setOfferedCard(null);
+  const handlePickOfferedCard = (card?: Card) => {
+    const toPick = card || offeredCards[0];
+    if (!toPick) return;
+    setHand(prev => [...prev, toPick]);
+    setOfferedCards(prev => prev.filter(c => c.id !== toPick.id));
     setJustPickedOfferedCard(true);
     // After picking floor card, user now has 6 cards and must discard!
+    setManualPhase('discard');
+  };
+
+  const handlePickAllOfferedCards = () => {
+    if (offeredCards.length === 0) return;
+    setHand(prev => [...prev, ...offeredCards]);
+    setOfferedCards([]);
+    setJustPickedOfferedCard(true);
     setManualPhase('discard');
   };
 
@@ -433,10 +445,12 @@ export function App() {
         <TurnStateController
           turnNumber={turnNumber}
           offeredCard={offeredCard}
+          offeredCards={offeredCards}
           recommendedDiscardCard={recommendedDiscardCard}
           currentPhase={currentPhase}
           onPickStock={handlePickStock}
           onPickOfferedCard={handlePickOfferedCard}
+          onPickAllOfferedCards={handlePickAllOfferedCards}
           onDiscardCard={handleDiscardCard}
           onResetHand={() => {
             setManualPhase('auto');
@@ -452,6 +466,7 @@ export function App() {
           flippedCard={flippedCard}
           tipluCard={tipluCard}
           offeredCard={offeredCard}
+          offeredCards={offeredCards}
           boundaryCards={boundaryCards}
           jutpattiRules={jutpattiRules}
           marriageRules={marriageRules}
@@ -473,7 +488,7 @@ export function App() {
           onSetCallbreakLedSuit={setCallbreakLedSuit}
           onSetCallbreakBid={setCallbreakBid}
           onSetCallbreakWon={setCallbreakWon}
-          onClearOfferedCard={() => setOfferedCard(null)}
+          onClearOfferedCard={() => setOfferedCards([])}
           onClearCallbreakTrick={() => setCallbreakTrickCards([])}
         />
 

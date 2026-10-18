@@ -34,6 +34,7 @@ export interface DetectedCardBox {
 export interface JutpattiRules {
   wildRule: 'minus1' | 'plus1' | 'same'; // Nepali.games (-1) vs Bhoos (+1) vs Same
   handSize: 5 | 7;
+  allowPairThrows?: boolean; // When opponent or player throws 2 matching cards (e.g. 6C + 6S)
 }
 
 export interface MarriageRules {

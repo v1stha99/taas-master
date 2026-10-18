@@ -9,6 +9,7 @@ interface TableContextBarProps {
   flippedCard: Card | null;
   tipluCard: Card | null;
   offeredCard: Card | null;
+  offeredCards?: Card[];
   boundaryCards: [Card | null, Card | null];
   jutpattiRules: JutpattiRules;
   marriageRules: MarriageRules;
@@ -39,6 +40,7 @@ export const TableContextBar: React.FC<TableContextBarProps> = ({
   flippedCard,
   tipluCard,
   offeredCard,
+  offeredCards = [],
   boundaryCards,
   jutpattiRules,
   marriageRules,
@@ -118,15 +120,27 @@ export const TableContextBar: React.FC<TableContextBarProps> = ({
             </button>
           </div>
 
-          {/* Offered Discard */}
+          {/* Offered Discard / Pair */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Offered Floor Card:</span>
-            {offeredCard ? (
-              <div className="flex items-center gap-1.5">
-                <CardChip card={offeredCard} size="sm" isHighlighted />
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {offeredCards.length > 1 ? 'Floor Pair Thrown:' : 'Floor Card:'}
+            </span>
+            {offeredCards.length > 0 ? (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {offeredCards.map((c, idx) => (
+                  <CardChip key={c.id || idx} card={c} size="sm" isHighlighted />
+                ))}
+                {offeredCards.length < 2 && (
+                  <button
+                    onClick={() => onOpenCardSelector('offered')}
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-bold px-2 py-1 bg-slate-800 rounded-lg border border-slate-700 hover:bg-slate-750"
+                  >
+                    + Add 2nd Card (Pair)
+                  </button>
+                )}
                 <button
                   onClick={onClearOfferedCard}
-                  className="text-[11px] text-rose-400 hover:underline"
+                  className="text-[11px] text-rose-400 hover:underline ml-1"
                 >
                   Clear
                 </button>
@@ -137,7 +151,7 @@ export const TableContextBar: React.FC<TableContextBarProps> = ({
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
-                Set Floor Card
+                Set Floor Card / Pair
               </button>
             )}
           </div>

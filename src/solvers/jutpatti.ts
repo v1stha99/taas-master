@@ -4,7 +4,8 @@ import { cardToSymbol, getRankValue, rankFromValue } from '../utils/cardUtils';
 export interface JutpattiContext {
   hand: Card[];
   flippedCard: Card | null;
-  offeredCard: Card | null;
+  offeredCards?: Card[]; // Supports pair throws e.g. [6C, 6S]
+  offeredCard?: Card | null; // Single card fallback
   phase: 'draw' | 'discard';
   discardHistory: Card[];
   nextPlayerPickups: Card[];
@@ -26,7 +27,13 @@ export function solveJutpatti(
   context: JutpattiContext,
   rules: JutpattiRules
 ): SolverRecommendation {
-  const { hand, flippedCard, offeredCard, phase, discardHistory, nextPlayerPickups, justPickedOfferedCard } = context;
+  const { hand, flippedCard, phase, discardHistory, nextPlayerPickups, justPickedOfferedCard } = context;
+  const offeredCards = context.offeredCards && context.offeredCards.length > 0
+    ? context.offeredCards
+    : context.offeredCard
+    ? [context.offeredCard]
+    : [];
+
   const wildRank = determineJutpattiWildRank(flippedCard, rules.wildRule);
 
   // Mark wildcards
@@ -69,7 +76,7 @@ export function solveJutpatti(
 
   // Draw Phase Logic
   if (phase === 'draw') {
-    if (!offeredCard) {
+    if (offeredCards.length === 0) {
       return {
         primaryAction: 'DRAW FROM STOCK (GADDI)',
         breakdown: [
@@ -80,51 +87,75 @@ export function solveJutpatti(
       };
     }
 
-    const offeredIsWild = wildRank && offeredCard.rank === wildRank;
-    const offeredMatchesSingleton = unpairedRanks.includes(offeredCard.rank);
-
-    // Can we win immediately on pickup?
-    // In Jutpatti, if we have N cards (odd), picking (N+1) with all pairs covered means |U'| <= w'
-    // Deficit before pickup is |singletons| - wildCount
     const deficiency = singletons.length - wildCount;
 
-    if (deficiency <= 1 && (offeredIsWild || offeredMatchesSingleton)) {
-      return {
-        primaryAction: `PICK OFFERED DISCARD (${cardToSymbol(offeredCard)}) AND DECLARE "JUT!" TO WIN!`,
-        isInstantWin: true,
-        isWinningDeclaration: true,
-        winType: 'Jut',
-        confidenceScore: 100,
-        cardsToHighlight: [offeredCard.id],
-        breakdown: [
-          { label: 'Winning Move', value: `Picking ${cardToSymbol(offeredCard)} pairs all remaining cards!` },
-          { label: 'Pair Formed', value: offeredIsWild ? `Wildcard pairs with ${singletons[0] ? cardToSymbol(singletons[0]) : 'wild'}` : `Pairs with ${offeredCard.rank}` },
-          { label: 'Wildcards', value: `${wildCount + (offeredIsWild ? 1 : 0)}` },
-        ],
-      };
+    // 1. Check if ANY offered card gives an immediate WIN
+    for (const card of offeredCards) {
+      const isWild = wildRank && card.rank === wildRank;
+      const matchesSingleton = unpairedRanks.includes(card.rank);
+
+      if (deficiency <= 1 && (isWild || matchesSingleton)) {
+        return {
+          primaryAction: `PICK ${cardToSymbol(card)} AND DECLARE "JUT!" TO WIN!`,
+          secondaryAction: offeredCards.length > 1 ? `Opponent threw a pair (${offeredCards.map(cardToSymbol).join(' ')}). Taking ${cardToSymbol(card)} wins immediately!` : undefined,
+          isInstantWin: true,
+          isWinningDeclaration: true,
+          winType: 'Jut',
+          confidenceScore: 100,
+          cardsToHighlight: [card.id],
+          breakdown: [
+            { label: 'Winning Move', value: `Picking ${cardToSymbol(card)} completes all pairs!` },
+            { label: 'Pair Formed', value: isWild ? `Wildcard pairs with ${singletons[0] ? cardToSymbol(singletons[0]) : 'wild'}` : `Pairs with ${card.rank}` },
+            { label: 'Floor Thrown', value: offeredCards.map(cardToSymbol).join(' ') },
+          ],
+        };
+      }
     }
 
-    if (offeredIsWild || offeredMatchesSingleton) {
+    // 2. Check if picking a single card from the thrown cards creates a new pair
+    const matchingCard = offeredCards.find(c => (wildRank && c.rank === wildRank) || unpairedRanks.includes(c.rank));
+    if (matchingCard) {
+      const isWild = wildRank && matchingCard.rank === wildRank;
       return {
-        primaryAction: `PICK OFFERED DISCARD (${cardToSymbol(offeredCard)})`,
-        secondaryAction: offeredIsWild ? 'Guaranteed wildcard pickup' : `Pairs with your singleton ${offeredCard.rank}`,
+        primaryAction: `PICK ${cardToSymbol(matchingCard)} FROM FLOOR`,
+        secondaryAction: isWild
+          ? 'Guaranteed wildcard pickup'
+          : `Pairs with your singleton ${matchingCard.rank}`,
         confidenceScore: 95,
-        cardsToHighlight: [offeredCard.id],
+        cardsToHighlight: [matchingCard.id],
         breakdown: [
-          { label: 'Recommendation', value: `Take ${cardToSymbol(offeredCard)} to create a new pair` },
+          { label: 'Recommendation', value: `Take ${cardToSymbol(matchingCard)} from opponent's thrown cards` },
           { label: 'Remaining Singletons after Pick', value: `${Math.max(0, singletons.length - 1)}` },
-          { label: 'Wild Rank', value: wildRank || 'N/A' },
+          { label: 'Floor Cards', value: offeredCards.map(cardToSymbol).join(' ') },
         ],
       };
     }
 
+    // 3. Opponent threw a PAIR of identical ranks (e.g. 6C + 6S):
+    // In pair-throw rules, if opponent throws a pair, taking BOTH cards adds a brand new pair to your hand!
+    const isOfferedPair = offeredCards.length === 2 && offeredCards[0].rank === offeredCards[1].rank;
+    if (isOfferedPair && rules.allowPairThrows !== false) {
+      const pairRank = offeredCards[0].rank;
+      return {
+        primaryAction: `TAKE PAIR [${offeredCards.map(cardToSymbol).join(' ')}] OR DRAW GADDI`,
+        secondaryAction: `Taking this pair gives you a new Jut of ${pairRank}s (must discard 2 singletons if you take 2)`,
+        confidenceScore: 80,
+        cardsToHighlight: offeredCards.map(c => c.id),
+        breakdown: [
+          { label: 'Opponent Action', value: `Threw a pair of ${pairRank}s (${offeredCards.map(cardToSymbol).join(' ')})` },
+          { label: 'Strategy', value: `If you want this ready-made pair, take it. Otherwise draw from face-down Gaddi pile.` },
+        ],
+      };
+    }
+
+    // Otherwise, none of the thrown cards help
     return {
       primaryAction: 'DRAW FROM FACE-DOWN STOCK (GADDI)',
-      secondaryAction: `Do not take ${cardToSymbol(offeredCard)} (adds useless deadwood singleton)`,
+      secondaryAction: `Do not take ${offeredCards.map(cardToSymbol).join(' ')} (does not match your singletons)`,
       confidenceScore: 90,
       breakdown: [
-        { label: 'Stock Draw Advice', value: `${cardToSymbol(offeredCard)} does not match any singleton in hand.` },
-        { label: 'Unpaired Singletons', value: singletons.map(cardToSymbol).join(', ') || 'None' },
+        { label: 'Stock Draw Advice', value: `Floor card(s) ${offeredCards.map(cardToSymbol).join(' ')} do not pair with your cards.` },
+        { label: 'Unpaired Singletons in Hand', value: singletons.map(cardToSymbol).join(', ') || 'None' },
         { label: 'Wildcards in Hand', value: `${wildCount}` },
       ],
     };
@@ -150,8 +181,8 @@ export function solveJutpatti(
   // Score candidate singletons to discard
   // LiveOuts: 4 - 1 - (seen in discard) - (1 if flippedCard is this rank)
   const candidateScores = singletons.map(card => {
-    // If just picked offered card from floor, cannot discard that exact card
-    const isIllegal = justPickedOfferedCard && offeredCard && offeredCard.rank === card.rank && offeredCard.suit === card.suit;
+    // If just picked offered card from floor, cannot discard that exact card on same turn
+    const isIllegal = justPickedOfferedCard && offeredCards.some(oc => oc.rank === card.rank && oc.suit === card.suit);
 
     const rank = card.rank;
     const deadInDiscard = discardHistory.filter(d => d.rank === rank).length;

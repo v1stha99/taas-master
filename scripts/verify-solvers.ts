@@ -53,6 +53,20 @@ const jutDiscard = solveJutpatti({
 console.log(`Jutpatti Discard Result: ${jutDiscard.primaryAction}`);
 assert(jutDiscard.primaryAction.includes('2') && jutDiscard.cardsToDiscard?.[0] === jutHand6[5].id, 'Jutpatti discards 2♣ (dead in discard, avoids feeding Jack to next player)');
 
+// Pair throw test: Opponent throws pair of 6s (6C, 6S)
+const pairThrowResult = solveJutpatti({
+  hand: ['7H', '7S', '9D', '9C', '6H'].map(s => parseCardString(s)!),
+  flippedCard: parseCardString('AH')!, // King is wild
+  offeredCards: [parseCardString('6C')!, parseCardString('6S')!], // Opponent threw a pair of 6s
+  phase: 'draw',
+  discardHistory: [],
+  nextPlayerPickups: [],
+  justPickedOfferedCard: false,
+}, { wildRule: 'plus1', handSize: 5 });
+
+assert(pairThrowResult.isWinningDeclaration === true, 'Jutpatti detects instant win by picking one card from opponent pair of 6s');
+console.log(`Jutpatti Pair-Throw Response: ${pairThrowResult.primaryAction}`);
+
 // 2. KITTI VERIFICATION (Document Benchmark Hand)
 console.log('\n--- 2. Kitti 280-Partition Solver Tests ---');
 // Benchmark hand: [5H, 6H, 7H, 7S, 7D, KH, KD, 9C, 2S]
