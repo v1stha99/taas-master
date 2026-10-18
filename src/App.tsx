@@ -100,6 +100,9 @@ export function App() {
     numOpponents: 3,
   });
 
+  // Turn Phase manual override ('draw' vs 'discard' vs 'auto')
+  const [manualPhase, setManualPhase] = useState<'draw' | 'discard' | 'auto'>('auto');
+
   // Modals state
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -107,10 +110,12 @@ export function App() {
     isOpen: boolean;
     target: 'hand' | 'flipped' | 'tiplu' | 'offered' | 'boundary1' | 'boundary2' | 'callbreakTrick';
     title: string;
+    subtitle?: string;
   }>({
     isOpen: false,
     target: 'hand',
     title: 'Add Card to Hand',
+    subtitle: 'Tap any card below',
   });
 
   // Switch Game Preset Default Hands
@@ -166,6 +171,12 @@ export function App() {
     setHand(defaultCodes.map(s => parseCardString(s)!).filter(Boolean));
   };
 
+  // Effective turn phase (auto-detected by hand size or manually toggled)
+  const currentPhase: 'draw' | 'discard' = useMemo(() => {
+    if (manualPhase !== 'auto') return manualPhase;
+    return hand.length % 2 === 1 ? 'draw' : 'discard';
+  }, [manualPhase, hand.length]);
+
   // Real-time Game Solver Execution
   const { recommendation, solveTimeMs } = useMemo(() => {
     const start = performance.now();
@@ -174,13 +185,12 @@ export function App() {
     try {
       switch (activeGame) {
         case 'jutpatti': {
-          const isDrawPhase = hand.length % 2 === 1; // 5 or 7 cards means draw phase
           rec = solveJutpatti(
             {
               hand,
               flippedCard,
               offeredCard,
-              phase: isDrawPhase ? 'draw' : 'discard',
+              phase: currentPhase,
               discardHistory,
               nextPlayerPickups,
               justPickedOfferedCard,
@@ -317,21 +327,36 @@ export function App() {
 
   // Card Selector Modal triggers
   const openSelector = (
-    target: 'hand' | 'flipped' | 'tiplu' | 'offered' | 'boundary1' | 'boundary2' | 'callbreakTrick'
+    target: 'hand' | 'flipped' | 'tiplu' | 'offered' | 'boundary1' | 'boundary2' | 'callbreakTrick',
+    customSubtitle?: string
   ) => {
     let title = 'Select Card';
-    if (target === 'hand') title = 'Add Card to Hand';
-    else if (target === 'flipped') title = 'Select Flipped Wildcard';
-    else if (target === 'tiplu') title = 'Select Tiplu Card (Phase 2)';
-    else if (target === 'offered') title = 'Select Offered Floor Discard';
-    else if (target === 'boundary1') title = 'Select Boundary Card 1';
-    else if (target === 'boundary2') title = 'Select Boundary Card 2';
-    else if (target === 'callbreakTrick') title = 'Select Opponent Trick Card';
+    let subtitle = customSubtitle || 'Tap any card below';
+
+    if (target === 'hand') {
+      title = 'What card did you draw from the Deck Pile (Gaddi)?';
+      subtitle = 'Tap the card you just picked from the face-down pile into your hand';
+    } else if (target === 'flipped') {
+      title = 'Select Flipped Wildcard';
+      subtitle = 'Tap the card that was turned face-up on the table';
+    } else if (target === 'tiplu') {
+      title = 'Select Tiplu Card (Phase 2)';
+    } else if (target === 'offered') {
+      title = 'What card did the previous player discard?';
+      subtitle = 'Tap the card thrown onto the table before your turn';
+    } else if (target === 'boundary1') {
+      title = 'Select Boundary Card 1';
+    } else if (target === 'boundary2') {
+      title = 'Select Boundary Card 2';
+    } else if (target === 'callbreakTrick') {
+      title = 'Select Opponent Trick Card';
+    }
 
     setCardSelectorConfig({
       isOpen: true,
       target,
       title,
+      subtitle,
     });
   };
 
@@ -340,6 +365,8 @@ export function App() {
 
     if (target === 'hand') {
       setHand(prev => [...prev, card]);
+      // After drawing, user now has 6 cards and must throw a discard!
+      setManualPhase('discard');
     } else if (target === 'flipped') {
       setFlippedCard(card);
     } else if (target === 'tiplu') {
@@ -366,6 +393,8 @@ export function App() {
     setHand(prev => [...prev, offeredCard]);
     setOfferedCard(null);
     setJustPickedOfferedCard(true);
+    // After picking floor card, user now has 6 cards and must discard!
+    setManualPhase('discard');
   };
 
   const handleDiscardCard = (card: Card) => {
@@ -373,6 +402,8 @@ export function App() {
     setDiscardHistory(prev => [...prev, card]);
     setTurnNumber(prev => prev + 1);
     setJustPickedOfferedCard(false);
+    // After discarding, back to 5 cards waiting for next turn's draw!
+    setManualPhase('draw');
   };
 
   // Recommended discard card object from solver
@@ -403,11 +434,16 @@ export function App() {
           turnNumber={turnNumber}
           offeredCard={offeredCard}
           recommendedDiscardCard={recommendedDiscardCard}
+          currentPhase={currentPhase}
           onPickStock={handlePickStock}
           onPickOfferedCard={handlePickOfferedCard}
           onDiscardCard={handleDiscardCard}
-          onResetHand={() => handleSelectGame(activeGame)}
+          onResetHand={() => {
+            setManualPhase('auto');
+            handleSelectGame(activeGame);
+          }}
           onOpenFloorSelector={() => openSelector('offered')}
+          onTogglePhase={() => setManualPhase(currentPhase === 'draw' ? 'discard' : 'draw')}
         />
 
         {/* Game-Specific Table Context & Rules */}
@@ -476,6 +512,7 @@ export function App() {
         onClose={() => setCardSelectorConfig(prev => ({ ...prev, isOpen: false }))}
         onSelectCard={handleSelectFromModal}
         title={cardSelectorConfig.title}
+        subtitle={cardSelectorConfig.subtitle}
       />
 
       {/* Vision & Settings Modal */}

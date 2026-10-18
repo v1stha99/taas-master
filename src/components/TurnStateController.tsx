@@ -1,31 +1,36 @@
 import React from 'react';
 import type { Card } from '../types/cards';
 import { cardToSymbol } from '../utils/cardUtils';
-import { ArrowDownToLine, ArrowUpFromLine, RotateCcw, Plus, Layers } from 'lucide-react';
-
+import { ArrowDownToLine, ArrowUpFromLine, RotateCcw, Layers, Package, ArrowRightLeft } from 'lucide-react';
 interface TurnStateControllerProps {
   turnNumber: number;
   offeredCard: Card | null;
   recommendedDiscardCard: Card | null;
+  currentPhase: 'draw' | 'discard';
   onPickStock: () => void;
   onPickOfferedCard: () => void;
   onDiscardCard: (card: Card) => void;
   onResetHand: () => void;
   onOpenFloorSelector?: () => void;
+  onTogglePhase?: () => void;
 }
 
 export const TurnStateController: React.FC<TurnStateControllerProps> = ({
   turnNumber,
   offeredCard,
   recommendedDiscardCard,
+  currentPhase,
   onPickStock,
   onPickOfferedCard,
   onDiscardCard,
   onResetHand,
   onOpenFloorSelector,
+  onTogglePhase,
 }) => {
+  const isDiscardPhase = currentPhase === 'discard';
+
   return (
-    <div className="bg-slate-900 border-2 border-slate-800 rounded-3xl p-4 shadow-xl space-y-3">
+    <div className="bg-slate-900 border-2 border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-3.5">
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -34,61 +39,102 @@ export const TurnStateController: React.FC<TurnStateControllerProps> = ({
             TURN #{turnNumber}
           </span>
           <span className="text-xs font-bold text-slate-300">
-            {recommendedDiscardCard ? 'Phase: Picked card → Ready to Discard' : 'Phase: Draw or Pick a Card'}
+            {isDiscardPhase ? 'Phase: Ready to Throw / Discard' : 'Phase: Draw from Pile or Pick Floor'}
           </span>
         </div>
 
-        <button
-          onClick={onResetHand}
-          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800 transition-all font-semibold"
-          title="Reset Hand / New Deal"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>New Deal</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          {onTogglePhase && (
+            <button
+              onClick={onTogglePhase}
+              className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 transition-all font-bold"
+              title="Switch between Draw and Discard phase"
+            >
+              <ArrowRightLeft className="w-3 h-3" />
+              <span>{isDiscardPhase ? 'Need to Draw' : "Throw First"}</span>
+            </button>
+          )}
+
+          <button
+            onClick={onResetHand}
+            className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800 transition-all font-semibold"
+            title="Reset Hand / New Deal"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">New Deal</span>
+          </button>
+        </div>
       </div>
 
-      {/* Prominent Mobile Action Buttons */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        {/* Draw from Stock Card */}
-        <button
-          onClick={onPickStock}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-950/40 transition-all"
-        >
-          <Plus className="w-4 h-4 text-white" />
-          <span>+ DRAW STOCK CARD (GADDI)</span>
-        </button>
+      {/* DRAW PHASE CONTROLS */}
+      {!isDiscardPhase ? (
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* 1. Pick from deck pile (Gaddi) */}
+            <button
+              onClick={onPickStock}
+              className="w-full flex flex-col items-center justify-center py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-98 text-white rounded-2xl shadow-lg shadow-blue-950/40 transition-all border border-blue-400/30"
+            >
+              <div className="flex items-center gap-2 font-black text-xs tracking-wide">
+                <Package className="w-4 h-4 text-blue-200" />
+                <span>DRAW FROM DECK PILE (GADDI)</span>
+              </div>
+              <span className="text-[10px] text-blue-200/80 mt-0.5 font-medium">
+                Floor card doesn't help? Draw 1 blind card from the pile
+              </span>
+            </button>
 
-        {/* Take Floor Card (or Set Floor Card if none) */}
-        {offeredCard ? (
-          <button
-            onClick={onPickOfferedCard}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 active:scale-98 text-slate-950 font-black text-xs rounded-2xl shadow-lg shadow-amber-950/40 transition-all"
-          >
-            <ArrowDownToLine className="w-4 h-4 text-slate-950" />
-            <span>+ TAKE FLOOR CARD ({cardToSymbol(offeredCard)})</span>
-          </button>
-        ) : (
-          <button
-            onClick={onOpenFloorSelector}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 active:scale-98 border border-dashed border-slate-600 text-slate-300 font-bold text-xs rounded-2xl transition-all"
-          >
-            <ArrowDownToLine className="w-4 h-4 text-amber-400" />
-            <span>+ SET FLOOR CARD FIRST</span>
-          </button>
-        )}
-      </div>
-
-      {/* Discard Button (Shows when ready to discard) */}
-      {recommendedDiscardCard && (
-        <div className="pt-2 border-t border-slate-800">
-          <button
-            onClick={() => onDiscardCard(recommendedDiscardCard)}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 active:scale-98 text-white font-black text-xs rounded-2xl shadow-lg shadow-rose-950/50 transition-all animate-pulse"
-          >
-            <ArrowUpFromLine className="w-4 h-4 text-white" />
-            <span>- THROW / DISCARD {cardToSymbol(recommendedDiscardCard)}</span>
-          </button>
+            {/* 2. Take Floor card if favorable */}
+            {offeredCard ? (
+              <button
+                onClick={onPickOfferedCard}
+                className="w-full flex flex-col items-center justify-center py-3.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 active:scale-98 text-slate-950 rounded-2xl shadow-lg shadow-amber-950/40 transition-all border border-yellow-300"
+              >
+                <div className="flex items-center gap-2 font-black text-xs tracking-wide">
+                  <ArrowDownToLine className="w-4 h-4 text-slate-950" />
+                  <span>TAKE FLOOR CARD ({cardToSymbol(offeredCard)})</span>
+                </div>
+                <span className="text-[10px] text-slate-900/80 mt-0.5 font-semibold">
+                  Pick the card thrown by the player before you
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenFloorSelector}
+                className="w-full flex flex-col items-center justify-center py-3.5 px-4 bg-slate-800/80 hover:bg-slate-800 active:scale-98 border border-dashed border-slate-600 text-slate-300 rounded-2xl transition-all"
+              >
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-300">
+                  <ArrowDownToLine className="w-4 h-4 text-amber-400" />
+                  <span>SET WHAT OPPONENT THREW</span>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-0.5">
+                  Tap to tell the app what card was thrown on the floor
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* DISCARD / THROW PHASE CONTROLS */
+        <div className="space-y-2">
+          {recommendedDiscardCard ? (
+            <button
+              onClick={() => onDiscardCard(recommendedDiscardCard)}
+              className="w-full flex flex-col items-center justify-center py-4 px-4 bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-500 hover:to-red-500 active:scale-98 text-white rounded-2xl shadow-xl shadow-rose-950/60 transition-all border border-rose-400/40 animate-pulse"
+            >
+              <div className="flex items-center gap-2 font-black text-sm tracking-wide">
+                <ArrowUpFromLine className="w-5 h-5 text-white" />
+                <span>THROW / DISCARD {cardToSymbol(recommendedDiscardCard)}</span>
+              </div>
+              <span className="text-[11px] text-rose-100/90 mt-0.5 font-medium">
+                Tap to confirm discard and advance to next turn
+              </span>
+            </button>
+          ) : (
+            <div className="text-center py-3 text-xs text-slate-400">
+              No singletons to discard. You may have a complete winning hand!
+            </div>
+          )}
         </div>
       )}
     </div>
